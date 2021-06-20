@@ -8,6 +8,44 @@
 #include "Arduino.h"
 #include "SPI.h"
 
+#if defined (ARDUINO_ARCH_ESP32)
+ADS1256::ADS1256(uint32_t _speedSPI, float vref, uint8_t _pinCS, uint8_t _pinRDY, uint8_t _pinRESET) {
+	pinCS    = _pinCS;
+	pinRDY   = _pinRDY;
+	pinRESET = _pinRESET;
+	speedSPI = _speedSPI;
+  // Set DRDY as input
+  //DDR_DRDY &= ~(1 << PINDEX_DRDY);
+	pinMode( pinRDY, INPUT );
+  // Set CS as output
+  //DDR_CS |= (1 << PINDEX_CS);
+  pinMode( pinCS, OUTPUT );
+
+  // set RESETPIN as output
+  pinMode( pinRESET, OUTPUT );
+	digitalWrite( pinRESET, LOW );
+	delay( 1 ); // LOW at least 4 clock cycles of onboard clock. 100 microseconds is enough
+	digitalWrite( pinRESET, HIGH ); // now reset to default values
+
+
+  // Voltage Reference
+  _VREF = vref;
+
+  // Default conversion factor
+  _conversionFactor = 1.0;
+
+  // Start SPI
+  delay( 500 );
+  SPI.begin();
+  delay( 500 );
+  while( digitalRead( pinRDY ) ) 
+	{
+	}  // wait for ready_line to go low
+  SPI.beginTransaction(SPISettings(speedSPI, MSBFIRST, SPI_MODE1));
+  digitalWrite( pinCS, LOW );
+	delayMicroseconds( 100 );
+}
+#else
 ADS1256::ADS1256(float clockspdMhz, float vref, bool useResetPin) {
   // Set DRDY as input
   DDR_DRDY &= ~(1 << PINDEX_DRDY);
@@ -32,15 +70,17 @@ ADS1256::ADS1256(float clockspdMhz, float vref, bool useResetPin) {
   SPI.beginTransaction(
       SPISettings(clockspdMhz * 1000000 / 4, MSBFIRST, SPI_MODE1));
 }
+#endif
 
 void ADS1256::writeRegister(unsigned char reg, unsigned char wdata) {
   CSON();
   SPI.transfer(WREG | reg);
   SPI.transfer(0);
   SPI.transfer(wdata);
-  __builtin_avr_delay_cycles(8);  // t11 delay (4*tCLKIN) after WREG command,
+  //__builtin_avr_delay_cycles(8);  // t11 delay (4*tCLKIN) after WREG command,
                                   // 16Mhz avr clock is approximately twice
                                   // faster that 7.68 Mhz ADS1256 master clock
+  delayMicroseconds(1);
   CSOFF();
 }
 
@@ -50,11 +90,13 @@ unsigned char ADS1256::readRegister(unsigned char reg) {
   CSON();
   SPI.transfer(RREG | reg);
   SPI.transfer(0);
-  __builtin_avr_delay_cycles(200);  // t6 delay (50*tCLKIN), 16Mhz avr clock is
+  //__builtin_avr_delay_cycles(200);  // t6 delay (50*tCLKIN), 16Mhz avr clock is
                                     // approximately twice faster that 7.68 Mhz
                                     // ADS1256 master clock
+  delayMicroseconds(13);
   readValue = SPI.transfer(0);
-  __builtin_avr_delay_cycles(8);  // t11 delay
+  //__builtin_avr_delay_cycles(8);  // t11 delay
+  delayMicroseconds(1);
   CSOFF();
 
   return readValue;
@@ -64,7 +106,8 @@ void ADS1256::sendCommand(unsigned char reg) {
   CSON();
   waitDRDY();
   SPI.transfer(reg);
-  __builtin_avr_delay_cycles(8);  // t11
+  //__builtin_avr_delay_cycles(8);  // t11
+  delayMicroseconds(1);
   CSOFF();
 }
 
@@ -74,7 +117,8 @@ void ADS1256::readTest() {
   unsigned char _highByte, _midByte, _lowByte;
   CSON();
   SPI.transfer(RDATA);
-  __builtin_avr_delay_cycles(200);  // t6 delay
+  //__builtin_avr_delay_cycles(200);  // t6 delay
+  delayMicroseconds(13);
 
   _highByte = SPI.transfer(WAKEUP);
   _midByte = SPI.transfer(WAKEUP);
@@ -86,7 +130,8 @@ void ADS1256::readTest() {
 float ADS1256::readCurrentChannel() {
   CSON();
   SPI.transfer(RDATA);
-  __builtin_avr_delay_cycles(200);  // t6 delay
+  //__builtin_avr_delay_cycles(200);  // t6 delay
+  delayMicroseconds(13);
   float adsCode = read_float32();
   CSOFF();
   return ((adsCode / 0x7FFFFF) * ((2 * _VREF) / (float)_pga)) *
@@ -221,6 +266,18 @@ void ADS1256::begin(unsigned char drate, unsigned char gain, bool buffenable) {
   ;  // wait ADS1256 to settle after self calibration
 }
 
+#if defined (ARDUINO_ARCH_ESP32)
+void ADS1256::CSON() {
+  SPI.setHwCs(false);
+}  // digitalWrite(_CS, LOW); }
+
+void ADS1256::CSOFF() {
+  SPI.setHwCs(true);
+}  // digitalWrite(_CS, HIGH); }
+void ADS1256::waitDRDY() {
+  while(digitalRead(pinRDY));
+}
+#else
 void ADS1256::CSON() {
   PORT_CS &= ~(1 << PINDEX_CS);
 }  // digitalWrite(_CS, LOW); }
@@ -233,3 +290,4 @@ void ADS1256::waitDRDY() {
   while (PIN_DRDY & (1 << PINDEX_DRDY))
     ;
 }
+#endif

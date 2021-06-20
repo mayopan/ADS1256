@@ -43,7 +43,8 @@
 	
 	// Contributions are welcome
 #elif   defined(ARDUINO_ARCH_ESP32)
-	#error "Oops! ESP32 architecture not supported yet"	
+	//#error "Oops! ESP32 architecture not supported yet"
+
 	// Contributions are welcome
 #else 
 	// Contributions are welcome
@@ -137,7 +138,11 @@
 
 class ADS1256 {
  public:
+   #if defined (ARDUINO_ARCH_ESP32)
+   ADS1256(uint32_t _speedSPI, float vref, uint8_t _pinCS, uint8_t _pinRDY, uint8_t _pinRESET);
+   #else
   ADS1256(float clockspdMhz, float vref, bool useresetpin);
+  #endif
   void writeRegister(unsigned char reg, unsigned char wdata);
   unsigned char readRegister(unsigned char reg);
   void sendCommand(unsigned char cmd);
@@ -159,6 +164,12 @@ class ADS1256 {
   byte _pga;
   float _VREF;
   float _conversionFactor;
+  #if defined (ARDUINO_ARCH_ESP32)
+  		uint8_t pinCS;
+		uint8_t pinRDY;
+		uint8_t pinRESET;
+		uint32_t speedSPI;
+  #endif
 };
 
 #endif
