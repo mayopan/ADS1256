@@ -51,7 +51,7 @@
 	#error "Oops! Your board architecture is not supported yet'"
 #endif
 // ADS1256 Register
-#define STATUS 0x00
+#define ADS1256_STATUS 0x00
 #define MUX 0x01
 #define ADCON 0x02
 #define DRATE 0x03

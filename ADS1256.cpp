@@ -20,6 +20,7 @@ ADS1256::ADS1256(uint32_t _speedSPI, float vref, uint8_t _pinCS, uint8_t _pinRDY
   // Set CS as output
   //DDR_CS |= (1 << PINDEX_CS);
   pinMode( pinCS, OUTPUT );
+  CSON();
 
   // set RESETPIN as output
   pinMode( pinRESET, OUTPUT );
@@ -257,9 +258,9 @@ void ADS1256::begin(unsigned char drate, unsigned char gain, bool buffenable) {
   uint8_t byte2send = (adcon & ~bytemask) | gain;
   writeRegister(ADCON, byte2send);
   if (buffenable) {
-    uint8_t status = readRegister(STATUS);
+    uint8_t status = readRegister(ADS1256_STATUS);
     bitSet(status, 1);
-    writeRegister(STATUS, status);
+    writeRegister(ADS1256_STATUS, status);
   }
   sendCommand(SELFCAL);  // perform self calibration
   waitDRDY();
@@ -268,14 +269,16 @@ void ADS1256::begin(unsigned char drate, unsigned char gain, bool buffenable) {
 
 #if defined (ARDUINO_ARCH_ESP32)
 void ADS1256::CSON() {
-  SPI.setHwCs(false);
+  digitalWrite(pinCS,LOW);
 }  // digitalWrite(_CS, LOW); }
 
 void ADS1256::CSOFF() {
-  SPI.setHwCs(true);
+  digitalWrite(pinCS,HIGH);
 }  // digitalWrite(_CS, HIGH); }
 void ADS1256::waitDRDY() {
-  while(digitalRead(pinRDY));
+  while(digitalRead(pinRDY))
+  {
+  }
 }
 #else
 void ADS1256::CSON() {
