@@ -42,7 +42,7 @@
 	#define DDR_RESET DDRL
 	
 	// Contributions are welcome
-#elif   defined(ARDUINO_ARCH_ESP32)
+#elif   defined(ARDUINO_ARCH_ESP32)||defined(ARDUINO_ARCH_SAMD)
 	//#error "Oops! ESP32 architecture not supported yet"
 
 	// Contributions are welcome
@@ -64,7 +64,11 @@
 #define FSC2 0x0A
 
 // ADS1256 Command
+#if defined (ARDUINO_ARCH_SAMD)
+#define ADS_WAKEUP 0x00
+#else
 #define WAKEUP 0x00
+#endif
 #define RDATA 0x01
 #define RDATAC 0x03
 #define SDATAC 0x0f
@@ -138,7 +142,7 @@
 
 class ADS1256 {
  public:
-   #if defined (ARDUINO_ARCH_ESP32)
+   #if defined (ARDUINO_ARCH_ESP32)||defined (ARDUINO_ARCH_SAMD)
    ADS1256(uint32_t _speedSPI, float vref, uint8_t _pinCS, uint8_t _pinRDY, uint8_t _pinRESET);
    #else
   ADS1256(float clockspdMhz, float vref, bool useresetpin);
@@ -164,7 +168,7 @@ class ADS1256 {
   byte _pga;
   float _VREF;
   float _conversionFactor;
-  #if defined (ARDUINO_ARCH_ESP32)
+  #if defined (ARDUINO_ARCH_ESP32)| defined (ARDUINO_ARCH_SAMD)
   		uint8_t pinCS;
 		uint8_t pinRDY;
 		uint8_t pinRESET;

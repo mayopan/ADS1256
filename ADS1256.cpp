@@ -8,25 +8,23 @@
 #include "Arduino.h"
 #include "SPI.h"
 
-#if defined (ARDUINO_ARCH_ESP32)
+#if defined (ARDUINO_ARCH_ESP32) || defined (ARDUINO_ARCH_SAMD)
 ADS1256::ADS1256(uint32_t _speedSPI, float vref, uint8_t _pinCS, uint8_t _pinRDY, uint8_t _pinRESET) {
 	pinCS    = _pinCS;
 	pinRDY   = _pinRDY;
 	pinRESET = _pinRESET;
 	speedSPI = _speedSPI;
   // Set DRDY as input
-  //DDR_DRDY &= ~(1 << PINDEX_DRDY);
 	pinMode( pinRDY, INPUT );
   // Set CS as output
-  //DDR_CS |= (1 << PINDEX_CS);
   pinMode( pinCS, OUTPUT );
-  CSON();
 
   // set RESETPIN as output
   pinMode( pinRESET, OUTPUT );
 	digitalWrite( pinRESET, LOW );
 	delay( 1 ); // LOW at least 4 clock cycles of onboard clock. 100 microseconds is enough
 	digitalWrite( pinRESET, HIGH ); // now reset to default values
+  waitDRDY();
 
 
   // Voltage Reference
@@ -35,16 +33,6 @@ ADS1256::ADS1256(uint32_t _speedSPI, float vref, uint8_t _pinCS, uint8_t _pinRDY
   // Default conversion factor
   _conversionFactor = 1.0;
 
-  // Start SPI
-  delay( 500 );
-  SPI.begin();
-  delay( 500 );
-  while( digitalRead( pinRDY ) ) 
-	{
-	}  // wait for ready_line to go low
-  SPI.beginTransaction(SPISettings(speedSPI, MSBFIRST, SPI_MODE1));
-  digitalWrite( pinCS, LOW );
-	delayMicroseconds( 100 );
 }
 #else
 ADS1256::ADS1256(float clockspdMhz, float vref, bool useResetPin) {
@@ -121,9 +109,15 @@ void ADS1256::readTest() {
   //__builtin_avr_delay_cycles(200);  // t6 delay
   delayMicroseconds(13);
 
+  #if defined (ARDUINO_ARCH_SAMD)
+  _highByte = SPI.transfer(ADS_WAKEUP);
+  _midByte = SPI.transfer(ADS_WAKEUP);
+  _lowByte = SPI.transfer(ADS_WAKEUP);  
+  #else
   _highByte = SPI.transfer(WAKEUP);
   _midByte = SPI.transfer(WAKEUP);
   _lowByte = SPI.transfer(WAKEUP);
+  #endif
 
   CSOFF();
 }
@@ -144,9 +138,15 @@ unsigned long ADS1256::read_uint24() {
   unsigned char _highByte, _midByte, _lowByte;
   unsigned long value;
 
+  #if defined (ARDUINO_ARCH_SAMD)
+  _highByte = SPI.transfer(ADS_WAKEUP);
+  _midByte = SPI.transfer(ADS_WAKEUP);
+  _lowByte = SPI.transfer(ADS_WAKEUP);  
+  #else
   _highByte = SPI.transfer(WAKEUP);
   _midByte = SPI.transfer(WAKEUP);
   _lowByte = SPI.transfer(WAKEUP);
+  #endif
 
   // Combine all 3-bytes to 24-bit data using byte shifting.
   value = ((long)_highByte << 16) + ((long)_midByte << 8) + ((long)_lowByte);
@@ -178,82 +178,31 @@ void ADS1256::setChannel(byte channel) { setChannel(channel, -1); }
 // AINCOM
 void ADS1256::setChannel(byte AIN_P, byte AIN_N) {
   unsigned char MUX_CHANNEL;
-  unsigned char MUXP;
-  unsigned char MUXN;
-
-  switch (AIN_P) {
-    case 0:
-      MUXP = ADS1256_MUXP_AIN0;
-      break;
-    case 1:
-      MUXP = ADS1256_MUXP_AIN1;
-      break;
-    case 2:
-      MUXP = ADS1256_MUXP_AIN2;
-      break;
-    case 3:
-      MUXP = ADS1256_MUXP_AIN3;
-      break;
-    case 4:
-      MUXP = ADS1256_MUXP_AIN4;
-      break;
-    case 5:
-      MUXP = ADS1256_MUXP_AIN5;
-      break;
-    case 6:
-      MUXP = ADS1256_MUXP_AIN6;
-      break;
-    case 7:
-      MUXP = ADS1256_MUXP_AIN7;
-      break;
-    default:
-      MUXP = ADS1256_MUXP_AINCOM;
-  }
-
-  switch (AIN_N) {
-    case 0:
-      MUXN = ADS1256_MUXN_AIN0;
-      break;
-    case 1:
-      MUXN = ADS1256_MUXN_AIN1;
-      break;
-    case 2:
-      MUXN = ADS1256_MUXN_AIN2;
-      break;
-    case 3:
-      MUXN = ADS1256_MUXN_AIN3;
-      break;
-    case 4:
-      MUXN = ADS1256_MUXN_AIN4;
-      break;
-    case 5:
-      MUXN = ADS1256_MUXN_AIN5;
-      break;
-    case 6:
-      MUXN = ADS1256_MUXN_AIN6;
-      break;
-    case 7:
-      MUXN = ADS1256_MUXN_AIN7;
-      break;
-    default:
-      MUXN = ADS1256_MUXN_AINCOM;
-  }
-
-  MUX_CHANNEL = MUXP | MUXN;
-
+  if(AIN_P>=8)
+    AIN_P=8;
+  if(AIN_N>=8)
+    AIN_N=8;
+  MUX_CHANNEL=AIN_P<<4|AIN_N;
   CSON();
   writeRegister(MUX, MUX_CHANNEL);
-  sendCommand(SYNC);
+//  sendCommand(SYNC);
+  #if defined (ARDUINO_ARCH_SAMD)
+//sendCommand(ADS_WAKEUP);
+  #else
   sendCommand(WAKEUP);
+  #endif
   CSOFF();
 }
 
 void ADS1256::begin(unsigned char drate, unsigned char gain, bool buffenable) {
   _pga = 1 << gain;
+  waitDRDY();
+  CSON();
+  SPI.beginTransaction(SPISettings(speedSPI, MSBFIRST, SPI_MODE1));
   sendCommand(
       SDATAC);  // send out SDATAC command to stop continous reading mode.
   writeRegister(DRATE, drate);  // write data rate register
-  uint8_t bytemask = B00000111;
+  uint8_t bytemask = B00000111;//CLK OUT: OFF, AUTO DETECT OFF
   uint8_t adcon = readRegister(ADCON);
   uint8_t byte2send = (adcon & ~bytemask) | gain;
   writeRegister(ADCON, byte2send);
@@ -263,11 +212,11 @@ void ADS1256::begin(unsigned char drate, unsigned char gain, bool buffenable) {
     writeRegister(ADS1256_STATUS, status);
   }
   sendCommand(SELFCAL);  // perform self calibration
-  waitDRDY();
-  ;  // wait ADS1256 to settle after self calibration
+  waitDRDY();  // wait ADS1256 to settle after self calibration
+  CSOFF();
 }
 
-#if defined (ARDUINO_ARCH_ESP32)
+#if defined (ARDUINO_ARCH_ESP32)||defined (ARDUINO_ARCH_SAMD)
 void ADS1256::CSON() {
   digitalWrite(pinCS,LOW);
 }  // digitalWrite(_CS, LOW); }
