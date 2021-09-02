@@ -24,7 +24,6 @@ ADS1256::ADS1256(uint32_t _speedSPI, float vref, uint8_t _pinCS, uint8_t _pinRDY
 	digitalWrite( pinRESET, LOW );
 	delay( 1 ); // LOW at least 4 clock cycles of onboard clock. 100 microseconds is enough
 	digitalWrite( pinRESET, HIGH ); // now reset to default values
-  waitDRDY();
 
 
   // Voltage Reference
@@ -109,15 +108,9 @@ void ADS1256::readTest() {
   //__builtin_avr_delay_cycles(200);  // t6 delay
   delayMicroseconds(13);
 
-  #if defined (ARDUINO_ARCH_SAMD)
-  _highByte = SPI.transfer(ADS_WAKEUP);
-  _midByte = SPI.transfer(ADS_WAKEUP);
-  _lowByte = SPI.transfer(ADS_WAKEUP);  
-  #else
   _highByte = SPI.transfer(WAKEUP);
   _midByte = SPI.transfer(WAKEUP);
   _lowByte = SPI.transfer(WAKEUP);
-  #endif
 
   CSOFF();
 }
@@ -138,15 +131,9 @@ unsigned long ADS1256::read_uint24() {
   unsigned char _highByte, _midByte, _lowByte;
   unsigned long value;
 
-  #if defined (ARDUINO_ARCH_SAMD)
-  _highByte = SPI.transfer(ADS_WAKEUP);
-  _midByte = SPI.transfer(ADS_WAKEUP);
-  _lowByte = SPI.transfer(ADS_WAKEUP);  
-  #else
   _highByte = SPI.transfer(WAKEUP);
   _midByte = SPI.transfer(WAKEUP);
   _lowByte = SPI.transfer(WAKEUP);
-  #endif
 
   // Combine all 3-bytes to 24-bit data using byte shifting.
   value = ((long)_highByte << 16) + ((long)_midByte << 8) + ((long)_lowByte);
@@ -194,22 +181,23 @@ void ADS1256::setChannel(byte AIN_P, byte AIN_N) {
   CSOFF();
 }
 
-void ADS1256::begin(unsigned char drate, unsigned char gain, bool buffenable) {
-  _pga = 1 << gain;
+void ADS1256::begin(DATARATE drate, GAIN gain, bool buffenable) {
+  _pga = 1 << (unsigned char)gain;
   waitDRDY();
   CSON();
   SPI.beginTransaction(SPISettings(speedSPI, MSBFIRST, SPI_MODE1));
   sendCommand(
       SDATAC);  // send out SDATAC command to stop continous reading mode.
-  writeRegister(DRATE, drate);  // write data rate register
+  writeRegister(DRATE, (unsigned char)drate);  // write data rate register
   uint8_t bytemask = B00000111;//CLK OUT: OFF, AUTO DETECT OFF
   uint8_t adcon = readRegister(ADCON);
-  uint8_t byte2send = (adcon & ~bytemask) | gain;
+  uint8_t byte2send = B00000000|(unsigned char)gain;//(adcon & ~bytemask) | gain;
+
   writeRegister(ADCON, byte2send);
   if (buffenable) {
-    uint8_t status = readRegister(ADS1256_STATUS);
+    uint8_t status = readRegister(STATUS);
     bitSet(status, 1);
-    writeRegister(ADS1256_STATUS, status);
+    writeRegister(STATUS, status);
   }
   sendCommand(SELFCAL);  // perform self calibration
   waitDRDY();  // wait ADS1256 to settle after self calibration
